@@ -5,10 +5,6 @@ date: "3/16/2018"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
 ## Assignment 4
 
 In this assignment we do the following:
@@ -39,16 +35,63 @@ library(tidyverse)
 library(brmstools)
 ```
 
+```{r clean data}
+data = meta[,c(5,29:31)]
+data = na.omit(data)
+```
+
+```{r}
+meta_effects <- brm(MeanES | se(SdES) ~ 1 + (1|StudyRef),
+               data = data, iter = 10000, cores = 4)
+
+meta_effects #mean=-0.55, sd=0.25
+#forest plot
+forest(meta_effects,
+       show_data = TRUE,
+       av_name = "Effect size")
+
+dev.copy(jpeg,'Figures/forest_plot.jpg')
+dev.off()
+```
+
+
 Step 2: Prepare the pitch SD data from last year
 - the data is available as Assignment4PitchData.csv (thanks Celine)
 - We do not know how to build random effects, yet. So we need to simplify the dataset to avoid interdependence between datapoint: How?
 - Also, let's standardize the data, so that they are compatible with our meta-analytic prior (Cohen's d is measured in SDs).
+
+```{r load data}
+library(magrittr)
+pitch = readxl::read_excel("Assignment4PitchDatav2.xlsx")
+
+pitch_sum = pitch %>% 
+  group_by(ID_unique) %>%
+  mutate(SD=mean(PitchSD)) %>%
+  select(1:3,5,13)
+
+pitch_ready=pitch_sum[!duplicated(pitch_sum),]
+pitch_ready$SD_s = scale(pitch_ready$SD)
+```
+
 
 Step 3: Build a regression model predicting Pitch SD from Diagnosis.
 - how is the outcome distributed? (likelihood function)
 - how are the parameters of the likelihood distribution distributed? Which predictors should they be conditioned on?
 - use a skeptical/conservative prior for the effects of diagnosis. Remember you'll need to motivate it.
 - Describe and plot the estimates. Evaluate model quality
+
+```{r}
+library(rethinking)
+library(ggplot2)
+
+ggplot(pitch_ready,aes(SD_s))+
+  geom_line(stat = "density")
+
+map( flist = alist(
+  SD ~ dnorm()
+))
+```
+
 
 Step 4: Now re-run the model with the meta-analytic prior
 - Describe and plot the estimates. Evaluate model quality
@@ -78,7 +121,7 @@ Optional step 9: Bromance magic.
 ```{r}
 
 brm_out <- brm(PitchSD ~ 1 + Diagnosis  +(1|ID_unique/Study), # Outcome as a function of the predictors as in lme4. 
-               data=Data, # Define the data
+               data=pitch, # Define the data
                family=gaussian(), # Define the family. 
                iter = 5000, warmup = 2000, cores = 4)
 summary(brm_out1)
